@@ -1,13 +1,40 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package be.howest.sooa.o5.gui;
 
+import be.howest.sooa.o5.data.BookingRepository;
+import be.howest.sooa.o5.data.RoomOptionRepository;
+import be.howest.sooa.o5.data.RoomTypeRepository;
+import be.howest.sooa.o5.domain.Booking;
+import be.howest.sooa.o5.domain.BookingValidation;
+import be.howest.sooa.o5.domain.RoomOption;
+import be.howest.sooa.o5.domain.RoomType;
+import be.howest.sooa.o5.ex.DBException;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.event.ActionEvent;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import javax.swing.AbstractAction;
+import javax.swing.AbstractListModel;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JRootPane;
+import javax.swing.KeyStroke;
+import javax.swing.ListModel;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 
 /**
  *
@@ -15,13 +42,128 @@ import java.awt.Window;
  */
 public class MainFrame extends javax.swing.JFrame {
 
+    private transient BookingRepository bookingRepo;
+    private transient RoomOptionRepository roomOptionRepo;
+    private transient RoomTypeRepository roomTypeRepo;
+
+    private transient Booking booking;
+
     /**
      * Creates new form MainFrame
      */
     public MainFrame() {
         initComponents();
     }
+
+    public void confirmAuthentication() {
+        bookingRepo = new BookingRepository();
+        roomOptionRepo = new RoomOptionRepository();
+        roomTypeRepo = new RoomTypeRepository();
+        init();
+        addListeners();
+    }
+
+    private void init() {
+        booking = new Booking();
+        fillRoomTypes();
+        fillRoomOptions();
+        updatePrice();
+    }
     
+    // <editor-fold defaultstate="collapsed" desc="Listeners">
+    private void addListeners() {
+        roomTypesList.addItemListener(new RoomTypeItemListener(this));
+        addBookingButtonActionListener();
+        addCustomerFieldActionListener();
+        addOptionListsListeners();
+        exitButton.addActionListener((ActionEvent e) -> {
+            close();
+        });
+    }
+    
+    private void addBookingButtonActionListener() {
+        addBookingButton.addActionListener((ActionEvent e) -> {
+            booking.setName(customerNameField.getText().trim());
+            BookingValidation validation = new BookingValidation(booking);
+            if (validation.isValid()) {
+                save(booking);
+            } else {
+                showWarning(validation.getMessage());
+            }
+        });
+    }
+    
+    private void addCustomerFieldActionListener() {
+        customerNameField.addActionListener((ActionEvent e) -> {
+            addBookingButton.doClick();
+        });
+    }
+    
+    private void addOptionListsListeners() {
+        availableOptionsList.addListSelectionListener(
+                new RoomOptionSelectionListener(this, addOptionsButton,
+                        availableOptionsList, selectedOptionsList));
+        selectedOptionsList.addListSelectionListener(
+                new RoomOptionSelectionListener(this, removeOptionsButton,
+                        selectedOptionsList, availableOptionsList));
+    }
+
+    public void addDialogKeyListener(JDialog dialog) {
+        KeyStroke escapeStroke
+                = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
+        String dispatchWindowClosingActionMapKey
+                = "com.spodding.tackline.dispatch:WINDOW_CLOSING";
+        JRootPane root = dialog.getRootPane();
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+                escapeStroke, dispatchWindowClosingActionMapKey);
+        root.getActionMap().put(dispatchWindowClosingActionMapKey,
+                new DialogClosingOnEscapeAction(dialog));
+    }
+    // </editor-fold>
+    //
+    // <editor-fold defaultstate="collapsed" desc="Fill and Reset">
+    private void fillRoomTypes() {
+        DefaultComboBoxModel<RoomType> model = new DefaultComboBoxModel<>();
+        model.addElement(null);
+        roomTypeRepo.findAll().forEach((roomType) -> {
+            model.addElement(roomType);
+        });
+        roomTypesList.setModel(model);
+    }
+
+    private void fillRoomOptions() {
+        RoomOptionListModel model = new RoomOptionListModel();
+        roomOptionRepo.findAll().forEach((roomOption) -> {
+            model.addElement(roomOption);
+        });
+        availableOptionsList.setModel(model);
+    }
+    
+    private void reset() {
+        selectedOptionsList.setModel(new DefaultListModel());
+        customerNameField.setText("");
+        init();
+    }
+    // </editor-fold>
+    //
+    // <editor-fold defaultstate="collapsed" desc="Data Manipulation">
+    private void save(Booking booking) {
+        try {
+            long lastInsertId = bookingRepo.save(booking);
+            Booking _booking = bookingRepo.read(lastInsertId);
+            String message = String.format("Booking #%d is registered with"
+                    + " %d option(s) for a total price of %s for %s",
+                    _booking.getId(), _booking.getOptionCount(),
+                    _booking.getFormattedPrice(), _booking.getName());
+            JOptionPane.showMessageDialog(this, message, "Info",
+                    JOptionPane.INFORMATION_MESSAGE);
+            reset();
+        } catch (DBException ex) {
+            showWarning(ex.getMessage());
+        }
+    }
+    // </editor-fold>
+    //
     // <editor-fold defaultstate="collapsed" desc="Custom Functions">
     private void centerScreen(Window window) {
         final Toolkit toolkit = Toolkit.getDefaultToolkit();
@@ -30,10 +172,58 @@ public class MainFrame extends javax.swing.JFrame {
         final int y = (screenSize.height - window.getHeight()) / 2;
         window.setLocation(x, y);
     }
-    
+
     private void centerScreen() {
         centerScreen(this);
     }
+
+    private void connectToDatabase() {
+        DatabaseConnectionDialog dialog = new DatabaseConnectionDialog(this);
+        centerScreen(dialog);
+        dialog.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent evt) {
+                if (!isConnected()) {
+                    close();
+                }
+            }
+        });
+        dialog.setVisible(true);
+    }
+
+    public void close() {
+        setVisible(false);
+        dispose();
+    }
+
+    private void showWarning(String message) {
+        JOptionPane.showMessageDialog(this, message, "Warning",
+                JOptionPane.WARNING_MESSAGE);
+    }
+
+    public boolean isConnected() {
+        return bookingRepo != null && roomOptionRepo != null
+                && roomTypeRepo != null;
+    }
+
+    public Set<RoomOption> buildRoomOptions() {
+        Set<RoomOption> roomOptions = new TreeSet<>();
+        ListModel<RoomOption> model = selectedOptionsList.getModel();
+        for (int i = 0; i < model.getSize(); i++) {
+            roomOptions.add(model.getElementAt(i));
+        }
+        return roomOptions;
+    }
+
+    private void updatePrice() {
+        RoomOptionListModel model
+                = new RoomOptionListModel(selectedOptionsList.getModel());
+        booking.setRoomOptions(model.getElements());
+        basePrice.setText(booking.getFormattedRoomPrice());
+        totalPrice.setText(booking.getFormattedPrice());
+
+    }
+
     // </editor-fold>
     //
     /**
@@ -48,8 +238,8 @@ public class MainFrame extends javax.swing.JFrame {
         titleLabel = new javax.swing.JLabel();
         roomTypeLabel = new javax.swing.JLabel();
         roomTypesList = new javax.swing.JComboBox<>();
-        bestPriceLabel = new javax.swing.JLabel();
-        bestPrice = new javax.swing.JLabel();
+        basePriceLabel = new javax.swing.JLabel();
+        basePrice = new javax.swing.JLabel();
         availableOptionsLabel = new javax.swing.JLabel();
         jScrollPane1 = new javax.swing.JScrollPane();
         availableOptionsList = new javax.swing.JList<>();
@@ -63,6 +253,7 @@ public class MainFrame extends javax.swing.JFrame {
         customerNameLabel = new javax.swing.JLabel();
         customerNameField = new javax.swing.JTextField();
         addBookingButton = new javax.swing.JButton();
+        exitButton = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setBackground(new java.awt.Color(255, 255, 255));
@@ -73,11 +264,11 @@ public class MainFrame extends javax.swing.JFrame {
 
         roomTypeLabel.setText("Room Type:");
 
-        bestPriceLabel.setText("Best price:");
-        bestPriceLabel.setToolTipText("");
+        basePriceLabel.setText("Base price:");
+        basePriceLabel.setToolTipText("");
 
-        bestPrice.setText("0");
-        bestPrice.setToolTipText("");
+        basePrice.setText("0");
+        basePrice.setToolTipText("");
 
         availableOptionsLabel.setText("Available Options:");
 
@@ -88,9 +279,11 @@ public class MainFrame extends javax.swing.JFrame {
         selectedOptionsLabel.setText("Selected Options");
 
         addOptionsButton.setText("Add >");
+        addOptionsButton.setEnabled(false);
 
         removeOptionsButton.setText("< Remove");
         removeOptionsButton.setActionCommand("> Remove");
+        removeOptionsButton.setEnabled(false);
 
         totalPriceLabel.setFont(new java.awt.Font("Tahoma", 0, 14)); // NOI18N
         totalPriceLabel.setText("Total price, including selected options:");
@@ -104,6 +297,8 @@ public class MainFrame extends javax.swing.JFrame {
 
         addBookingButton.setText("Add booking");
 
+        exitButton.setText("Exit");
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
@@ -111,9 +306,6 @@ public class MainFrame extends javax.swing.JFrame {
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                        .addGap(0, 0, Short.MAX_VALUE)
-                        .addComponent(addBookingButton))
                     .addComponent(customerNameField)
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -138,12 +330,17 @@ public class MainFrame extends javax.swing.JFrame {
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(roomTypesList, javax.swing.GroupLayout.PREFERRED_SIZE, 194, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addGap(18, 18, 18)
-                                .addComponent(bestPriceLabel)
+                                .addComponent(basePriceLabel)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(bestPrice))
+                                .addComponent(basePrice))
                             .addComponent(titleLabel)
                             .addComponent(roomTypeLabel))
-                        .addGap(0, 0, Short.MAX_VALUE)))
+                        .addGap(0, 0, Short.MAX_VALUE))
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
+                        .addGap(0, 0, Short.MAX_VALUE)
+                        .addComponent(addBookingButton)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(exitButton)))
                 .addContainerGap())
         );
         layout.setVerticalGroup(
@@ -156,9 +353,8 @@ public class MainFrame extends javax.swing.JFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(roomTypesList, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(bestPriceLabel)
-                    .addComponent(bestPrice))
-                .addGap(18, 18, 18)
+                    .addComponent(basePriceLabel)
+                    .addComponent(basePrice))
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
@@ -183,7 +379,9 @@ public class MainFrame extends javax.swing.JFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(customerNameField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(18, 18, 18)
-                .addComponent(addBookingButton)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(addBookingButton)
+                    .addComponent(exitButton))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
@@ -222,6 +420,7 @@ public class MainFrame extends javax.swing.JFrame {
             MainFrame newMainFrame = new MainFrame();
             newMainFrame.centerScreen();
             newMainFrame.setVisible(true);
+            newMainFrame.connectToDatabase();
         });
     }
 
@@ -229,20 +428,137 @@ public class MainFrame extends javax.swing.JFrame {
     private javax.swing.JButton addBookingButton;
     private javax.swing.JButton addOptionsButton;
     private javax.swing.JLabel availableOptionsLabel;
-    private javax.swing.JList<String> availableOptionsList;
-    private javax.swing.JLabel bestPrice;
-    private javax.swing.JLabel bestPriceLabel;
+    private javax.swing.JList<RoomOption> availableOptionsList;
+    private javax.swing.JLabel basePrice;
+    private javax.swing.JLabel basePriceLabel;
     private javax.swing.JTextField customerNameField;
     private javax.swing.JLabel customerNameLabel;
+    private javax.swing.JButton exitButton;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JButton removeOptionsButton;
     private javax.swing.JLabel roomTypeLabel;
-    private javax.swing.JComboBox<String> roomTypesList;
+    private javax.swing.JComboBox<RoomType> roomTypesList;
     private javax.swing.JLabel selectedOptionsLabel;
-    private javax.swing.JList<String> selectedOptionsList;
+    private javax.swing.JList<RoomOption> selectedOptionsList;
     private javax.swing.JLabel titleLabel;
     private javax.swing.JLabel totalPrice;
     private javax.swing.JLabel totalPriceLabel;
     // End of variables declaration//GEN-END:variables
+
+    // <editor-fold defaultstate="collapsed" desc="Custom Listeners">
+    private static class RoomOptionListModel extends AbstractListModel {
+
+        Set<RoomOption> elements = new TreeSet<>();
+
+        RoomOptionListModel() {
+
+        }
+
+        RoomOptionListModel(ListModel model) {
+            for (int i = 0; i < model.getSize(); i++) {
+                this.elements.add((RoomOption) model.getElementAt(i));
+            }
+        }
+
+        @Override
+        public int getSize() {
+            return elements.size();
+        }
+
+        @Override
+        public RoomOption getElementAt(int index) {
+            return elements.toArray(new RoomOption[getSize()])[index];
+        }
+
+        public Set<RoomOption> getElements() {
+            return Collections.unmodifiableSet(elements);
+        }
+
+        void addElement(RoomOption roomOption) {
+            elements.add(roomOption);
+        }
+
+        void addAllElements(List<RoomOption> roomOptions) {
+            elements.addAll(roomOptions);
+        }
+
+        void removeElement(RoomOption roomOption) {
+            elements.remove(roomOption);
+        }
+
+        void removeAllElements(List<RoomOption> roomOptions) {
+            elements.removeAll(roomOptions);
+        }
+    }
+
+    private static class RoomOptionSelectionListener implements ListSelectionListener {
+
+        final MainFrame frame;
+        final JButton button;
+        final JList list;
+        final JList siblingList;
+
+        RoomOptionSelectionListener(MainFrame frame, JButton button,
+                JList list, JList siblingList) {
+            this.frame = frame;
+            this.button = button;
+            this.list = list;
+            this.siblingList = siblingList;
+            addListeners();
+        }
+
+        final void addListeners() {
+            button.addActionListener((ActionEvent e) -> {
+                List<RoomOption> selected = list.getSelectedValuesList();
+                RoomOptionListModel model = new RoomOptionListModel(list.getModel());
+                RoomOptionListModel siblingModel = new RoomOptionListModel(siblingList.getModel());
+                model.removeAllElements(selected);
+                siblingModel.addAllElements(selected);
+                list.setModel(model);
+                siblingList.setModel(siblingModel);
+                frame.updatePrice();
+                button.setEnabled(false);
+            });
+        }
+
+        @Override
+        public void valueChanged(ListSelectionEvent e) {
+            if (e.getValueIsAdjusting()) {
+                button.setEnabled(list.getSelectedValuesList().size() > 0);
+            }
+        }
+    }
+
+    private static class DialogClosingOnEscapeAction extends AbstractAction {
+
+        final JDialog dialog;
+
+        DialogClosingOnEscapeAction(JDialog dialog) {
+            this.dialog = dialog;
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            dialog.dispatchEvent(new WindowEvent(
+                    dialog, WindowEvent.WINDOW_CLOSING));
+        }
+    }
+
+    private static class RoomTypeItemListener implements ItemListener {
+
+        final MainFrame frame;
+
+        RoomTypeItemListener(MainFrame frame) {
+            this.frame = frame;
+        }
+
+        @Override
+        public void itemStateChanged(ItemEvent e) {
+            RoomType roomType = (RoomType) frame.roomTypesList.getSelectedItem();
+            frame.booking.setRoomType(roomType);
+            frame.updatePrice();
+        }
+    }
+    // </editor-fold>
 }

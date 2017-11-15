@@ -48,6 +48,11 @@ public class RoomOption extends Cost implements Comparable<RoomOption> {
         final RoomOption other = (RoomOption) obj;
         return description.equalsIgnoreCase(other.description);
     }
+    
+    @Override
+    public String toString() {
+        return description + " (" + getFormattedPrice() + ")";
+    }
 
     @Override
     public int compareTo(RoomOption other) {

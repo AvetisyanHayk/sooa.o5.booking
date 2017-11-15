@@ -49,4 +49,16 @@ public class RoomType extends Cost {
         final RoomType other = (RoomType) obj;
         return description.equalsIgnoreCase(other.description);
     }
+    
+    @Override
+    public String toString() {
+        if (description != null) {
+            if (description.length() == 1) {
+                return description.toUpperCase(Locale.ENGLISH);
+            }
+            return description.toUpperCase(Locale.ENGLISH).charAt(0)
+                    + description.toLowerCase(Locale.ENGLISH).substring(1);
+        }
+        return "";
+    }
 }

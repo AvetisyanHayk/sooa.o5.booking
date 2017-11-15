@@ -6,14 +6,17 @@ package be.howest.sooa.o5.domain;
  */
 public class BookingValidation {
     
-    private String message;
+    private String message = "";
     
     public BookingValidation(Booking booking) {
         if (booking.getRoomType() == null) {
             message = "Room Type may not be empty.";
         }
-        if (booking.getName() == null) {
-            message += "Customer name may not be empty";
+        if (booking.getName() == null || "".equals(booking.getName())) {
+            if (!"".equals(message)) {
+                message += "\n";
+            }
+            message += "Customer name may not be empty.";
         }
     }
 
@@ -22,6 +25,6 @@ public class BookingValidation {
     }
     
     public boolean isValid() {
-        return message == null;
+        return "".equals(message);
     }
 }
