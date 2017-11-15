@@ -93,7 +93,7 @@ public class MainFrame extends javax.swing.JFrame {
         removeOptionsButton.setActionCommand("> Remove");
 
         totalPriceLabel.setFont(new java.awt.Font("Tahoma", 0, 14)); // NOI18N
-        totalPriceLabel.setText("Total price included selected options:");
+        totalPriceLabel.setText("Total price, including selected options:");
         totalPriceLabel.setToolTipText("");
 
         totalPrice.setFont(new java.awt.Font("Tahoma", 0, 14)); // NOI18N
@@ -182,7 +182,7 @@ public class MainFrame extends javax.swing.JFrame {
                 .addComponent(customerNameLabel)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(customerNameField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGap(18, 18, 18)
                 .addComponent(addBookingButton)
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
