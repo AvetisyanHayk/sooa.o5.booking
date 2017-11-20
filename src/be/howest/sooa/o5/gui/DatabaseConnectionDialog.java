@@ -92,6 +92,7 @@ public class DatabaseConnectionDialog extends javax.swing.JDialog {
         setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
         setTitle("Connect to Database");
         setBackground(null);
+        setResizable(false);
 
         driversList.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "MySQL" }));
 
